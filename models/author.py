@@ -1,100 +1,68 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+
 from database.connection import get_db_connection
-
+from database.setup import create_tables
+conn = get_db_connection()
+cursor = conn.cursor()
 class Author:
-    all = {}
     def __init__(self, id, name):
-        self.id = id
-        self.name = name
-
-    def __repr__(self):
-        return f'<Author {self.id} {self.name}>'
+        if not isinstance(name, str) or len(name) == 0:
+            raise ValueError("Name must be a non-empty string")
+        self._id = id
+        self._name = name
     
-
-    @property
-    def id(self):
-        return self._id
-    
-    @id.setter
-    def id(self, id):
-        if isinstance(id, int):
-            self._id = id
-
-
     @property
     def name(self):
         return self._name
+    @property
+    def id(self):
+        return self._id
+    @id.setter    
+    def id(self, id):
+        if not isinstance (id , int):
+            raise   TypeError("id must be an integer")
+        self._id = id
+
+
     
-    @name.setter
-    def name(self, new_name):
-        if hasattr(self, '_name'):
-            raise AttributeError("Name cannot be changed after initialization")
-        else:
-            if isinstance(new_name, str):
-                if len(new_name) > 0:
-                    self._name = new_name
-
-
-    def save(self):
-        conn = get_db_connection()
-        CURSOR = conn.cursor()
+    def save (self):
+        cursor.execute("SELECT id FROM authors WHERE id = ?", (self._id,))
+        if cursor.fetchone():
+                raise ValueError(f"Author with id {self._id} already exists")
         sql = """
-            INSERT INTO authors (name)
-            VALUES (?)
+         INSERT INTO authors (
+         id, name)  
+         VALUES (?, ?)  
         """
-        CURSOR.execute(sql, (self.name,))
+        cursor.execute(sql,(self._id, self._name))
         conn.commit()
-        
-        self.id = CURSOR.lastrowid
-        type(self).all[self.id] = self
-
-    @classmethod
-    #creates a new entry in the authors table of the database
-    def create(cls, name):
-        author = cls(name)
-        author.save()
-        return author
-    
-    def get_author_id(self):
-        return self.id
-
     def articles(self):
-        from models.article import Article
-        conn = get_db_connection()
-        CURSOR = conn.cursor()
-        """retrieves and returns a list of articles wriitten by this author"""
         sql = """
-            SELECT ar.*
-            FROM articles ar
-            INNER JOIN authors a ON ar.author = a.id
-            WHERE a.id = ?
+            SELECT articles.title
+            FROM articles
+            LEFT JOIN authors
+            ON articles.author_id = authors.id
+            WHERE authors.id = ?
         """
-
-        CURSOR.execute(sql, (self.id,))
-        article_data = CURSOR.fetchall()
-
-        articles = []
-        for row in article_data:
-            articles.append(Article(*row))
-        return articles
-    
-
+        cursor.execute(sql, (self._id,))
+        articles = cursor.fetchall()
+        return [article[0] for article in articles] if articles else None
     def magazines(self):
-        from models.magazine import Magazine
-        conn = get_db_connection()
-        CURSOR = conn.cursor()
-        """Retrieves and returns a list of Magazine objects where this Author has written articles"""
         sql = """
-            SELECT DISTINCT m.*
-            FROM magazines m
-            INNER JOIN articles ar ON ar.magazine = m.id
-            INNER JOIN authors a ON ar.author = a.id
-            WHERE a.id = ?
+            SELECT magazines.name
+            FROM magazines
+            LEFT JOIN articles
+            ON magazines.id = articles.magazine_id
+            LEFT JOIN authors
+            ON articles.author_id = authors.id
+            WHERE authors.id = ?
         """
-
-        CURSOR.execute(sql, (self.id,))
-        magazine_data = CURSOR.fetchall()
-
-        magazines = []
-        for row in magazine_data:
-            magazines.append(Magazine(*row))
-        return magazines
+        cursor.execute(sql,(self._id,))
+        magazines = cursor.fetchall()
+        return [magazine[0] for magazine in magazines] if magazines else None
+   
+    def __repr__(self):
+        return f'<Author {self.name}>'
